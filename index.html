@@ -126,7 +126,7 @@ label.f{display:grid;gap:3px;font-size:12px;color:var(--muted)}
   <header class="top">
     <div>
       <h1>港股 D&amp;O 公司档案库</h1>
-      <div class="sub">2025 年 12 月港股新上市公司 · 按 D&amp;O 公司调查模板（A–I）整理 · 只读</div>
+      <div class="sub">2025 年 12 月 + 2026 年上半年港股新上市公司（上半年批次仅民企） · 按 D&amp;O 公司调查模板（A–I）整理 · 只读</div>
     </div>
     <div class="stats" id="stats"></div>
   </header>
@@ -134,6 +134,7 @@ label.f{display:grid;gap:3px;font-size:12px;color:var(--muted)}
     <aside class="index" aria-label="公司列表">
       <div class="idx-tools">
         <input id="q" type="search" placeholder="搜索代号、公司名、城市">
+        <div class="idx-row" id="batches"></div>
         <div class="idx-row" id="filters"></div>
         <button class="btn small" id="addBtn" type="button">＋ 新增公司</button>
       </div>
@@ -162,7 +163,10 @@ const LISTS={
 };
 const STATUS={"已完成":"done","录入中":"wip","待录入":"todo"};
 
-let db=null, canWrite=true, docs=new Map(), sel=null, editing=false, draft=null, filter="全部", confirmDel=false;
+let db=null, canWrite=true, docs=new Map(), sel=null, editing=false, draft=null, filter="全部", confirmDel=false, batch="全部批次";
+const BATCHES={"全部批次":"全部批次","2025-12":"2025年12月","2026H1":"2026上半年"};
+const batchOf=d=>d.batch||"2025-12";
+const inBatch=d=>batch==="全部批次"||batchOf(d)===batch;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function toast(t){const el=document.createElement("div");el.className="toast";el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2200)}
@@ -175,19 +179,21 @@ function norm(d){const b=blank(d.code,d.name);return Object.assign(b,structuredC
 
 /* ---------- index ---------- */
 function renderStats(){
-  const all=[...docs.values()];
+  const all=[...docs.values()].filter(inBatch);
   const c=k=>all.filter(d=>d.priority===k).length;
   const done=all.filter(d=>d.status==="已完成").length;
   $("#stats").innerHTML=`<span class="stat">共 <b>${all.length}</b> 家</span><span class="stat">已完成 <b>${done}</b></span><span class="stat">A 级 <b>${c("A")}</b></span><span class="stat">B 级 <b>${c("B")}</b></span><span class="stat">C 级 <b>${c("C")}</b></span>`;
 }
 function renderFilters(){
   const opts=["全部","A","B","C","已完成","待录入"];
+  $("#batches").innerHTML=Object.entries(BATCHES).map(([k,v])=>`<button type="button" class="chipbtn" aria-pressed="${k===batch}" data-b="${k}">${v}</button>`).join("");
   $("#filters").innerHTML=opts.map(o=>`<button type="button" class="chipbtn" aria-pressed="${o===filter}" data-f="${o}">${o==="A"||o==="B"||o==="C"?o+" 级":o}</button>`).join("");
 }
 function sortKey(d){return ({"A":0,"B":1,"C":2}[d.priority]??3)+"|"+(d.listDate||"9")+"|"+d.code}
 function renderList(){
   const q=$("#q").value.trim().toLowerCase();
   let arr=[...docs.values()].filter(d=>{
+    if(!inBatch(d))return false;
     if(filter==="A"||filter==="B"||filter==="C"){if(d.priority!==filter)return false}
     else if(filter!=="全部"&&d.status!==filter)return false;
     if(!q)return true;
@@ -202,7 +208,7 @@ function renderList(){
       <span class="pri ${p}">${esc(d.priority||"–")}</span>
       <span class="nm">${esc(d.name||"未命名")}</span>
       <span class="code">${esc(d.code)}</span>
-      <span class="meta"><span class="st ${STATUS[d.status]||"todo"}">${esc(d.status||"待录入")}</span>${d.listDate?`<span>${esc(d.listDate)}</span>`:""}${d.city?`<span>${esc(d.city)}</span>`:""}${mc?`<span>${esc(mc)}</span>`:""}</span>
+      <span class="meta"><span class="st ${STATUS[d.status]||"todo"}">${esc(d.status||"待录入")}</span><span>${batchOf(d)==="2026H1"?"26上半年":"25年12月"}</span>${d.listDate?`<span>${esc(d.listDate)}</span>`:""}${d.city?`<span>${esc(d.city)}</span>`:""}${mc?`<span>${esc(mc)}</span>`:""}</span>
     </button>`}).join("");
 }
 
@@ -328,6 +334,7 @@ document.addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;
   if(t.dataset.code!==undefined&&t.classList.contains("item"))return select(t.dataset.code);
   if(t.dataset.f){filter=t.dataset.f;renderFilters();renderList();return}
+  if(t.dataset.b){batch=t.dataset.b;renderFilters();renderList();renderStats();return}
   if(t.id==="editBtn"){draft=norm(docs.get(sel));editing=true;confirmDel=false;renderEdit();renderList();return}
   if(t.id==="cancelBtn"){editing=false;draft=null;show();return}
   if(t.id==="saveBtn")return save();
